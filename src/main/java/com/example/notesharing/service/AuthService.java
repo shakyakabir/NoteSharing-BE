@@ -8,6 +8,8 @@ import com.example.notesharing.Repository.UserRepository;
 import com.example.notesharing.modal.OTP;
 import com.example.notesharing.modal.User;
 import com.example.notesharing.payload.ApiResponse;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -74,50 +76,54 @@ private EmailService emailService;
 
     @Autowired
     JwtService jwtService;
-    public ApiResponse<?> LoginService(LoginDTO loginRequest){
+    public ApiResponse<?> LoginService(LoginDTO loginRequest, HttpServletResponse response) {
 
+        User user = userRepo.findByEmail(loginRequest.getEmail())
+                .orElse(null);
 
-        User user=userRepo.findByEmail(loginRequest.getEmail()).orElse(null);
-        if(user == null){
-            return  ApiResponse.builder()
+        if (user == null) {
+            return ApiResponse.builder()
                     .status("404")
                     .message("User not found")
                     .build();
-
-
-
         }
-        if(!user.isEmailVerified()){
+
+        if (!user.isEmailVerified()) {
             return ApiResponse.builder()
                     .status("403")
-                    .message("Email not Verify")
+                    .message("Email not verified")
                     .build();
-
         }
 
-        if(!user.getPassword().equals(loginRequest.getPassword())){
+        if (!user.getPassword().equals(loginRequest.getPassword())) {
             return ApiResponse.builder()
                     .status("400")
-                    .message("Invalid credential")
+                    .message("Invalid credentials")
                     .build();
         }
-        if (!user.getEmail().equals(loginRequest.getEmail())) {
-            return
-                    ApiResponse.builder()
-                            .status("400")
-                            .message("Invalid credential")
-                            .build();
-        }
 
+        String accessToken = jwtService.generateToken(user.getEmail());
+        String refreshToken = jwtService.generateRefreshToken(user.getEmail());
 
-        String accessToken=jwtService.generateToken(loginRequest.getEmail());
-        String refreshToken=jwtService.generateRefreshToken(loginRequest.getEmail());
+        Cookie accessCookie = new Cookie("accessToken", accessToken);
+        accessCookie.setHttpOnly(true);
+        accessCookie.setPath("/");
+        accessCookie.setMaxAge(60 * 15); // 15 min
+
+        // 🔥 REFRESH TOKEN COOKIE (optional but recommended)
+        Cookie refreshCookie = new Cookie("refreshToken", refreshToken);
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setPath("/");
+        refreshCookie.setMaxAge(60 * 60 * 24 * 7); // 7 days
+
+        // ADD COOKIES TO RESPONSE
+        response.addCookie(accessCookie);
+        response.addCookie(refreshCookie);
 
         return ApiResponse.builder()
                 .status("200")
                 .message("login success")
-                .data(new AuthResponseDTO(accessToken,refreshToken))
+                .data("set cookies")
                 .build();
-
     }
 }

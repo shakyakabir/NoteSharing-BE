@@ -59,4 +59,27 @@ public String generateToken(String email){
                 .parseClaimsJws(token).getBody().getSubject();
     }
 
+
+    public Date extractExpiration(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+    }
+
+    public boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public boolean isRefreshTokenValid(String token, String email) {
+        try {
+            return extractEmail(token).equals(email)
+                    && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
 }
