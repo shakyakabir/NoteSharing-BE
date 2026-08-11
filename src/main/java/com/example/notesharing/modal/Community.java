@@ -1,6 +1,5 @@
 package com.example.notesharing.modal;
 
-import com.example.notesharing.Enum.Visibility;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,34 +7,34 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-
 @Entity
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class Note {
-
+public class Community {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-    private String title;
+
+    private String name;
+
+    private String category;
+
     @Lob
-    @Column(columnDefinition = "LONGTEXT")
-    private String content;
-    @Enumerated(EnumType.STRING)
-    private Visibility visibility;
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
-    private String shareCode; // for friend sharing
-
-    private String userEmail; // since you use email login
+    private String ownerEmail;
 
     @ManyToOne
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "owner_id")
     @JsonIgnore
-    private User user;
+    private User owner;
+
+    private boolean active;
 
     private LocalDateTime createdAt;
 

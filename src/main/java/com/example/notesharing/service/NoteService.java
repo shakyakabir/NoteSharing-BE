@@ -3,7 +3,9 @@ package com.example.notesharing.service;
 import com.example.notesharing.DTO.Request.CreateNoteRequest;
 import com.example.notesharing.Enum.Visibility;
 import com.example.notesharing.Repository.NoteRepository;
+import com.example.notesharing.Repository.UserRepository;
 import com.example.notesharing.modal.Note;
+import com.example.notesharing.modal.User;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import org.springframework.stereotype.Service;
@@ -17,6 +19,9 @@ public class NoteService {
     @Autowired
     NoteRepository noteRepository;
 
+    @Autowired
+    UserRepository userRepository;
+
     // CREATE NOTE (EMPTY CONTENT)
     public Note createNote(CreateNoteRequest req, String email) {
 
@@ -25,6 +30,9 @@ public class NoteService {
         note.setTitle(req.getTitle());
         note.setContent(""); // IMPORTANT: empty at start
         note.setUserEmail(email);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        note.setUser(user);
         note.setCreatedAt(LocalDateTime.now());
         note.setUpdatedAt(LocalDateTime.now());
 
@@ -39,7 +47,7 @@ public class NoteService {
     }
 
     // UPDATE CONTENT (AUTO SAVE)
-    public Note updateContent(UUID id, String content, String email) {
+    public Note updateContent(UUID id, String content, String title,String email) {
 
         Note note = noteRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Not found"));
@@ -51,6 +59,7 @@ public class NoteService {
         }
 
         note.setContent(content);
+        note.setTitle(title);
         note.setUpdatedAt(LocalDateTime.now());
 
         return noteRepository.save(note);
@@ -70,6 +79,17 @@ public class NoteService {
         return note;
     }
 
+    public Note getPublicNote(UUID id) {
+
+        Note note = noteRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Not found"));
+
+
+
+
+        return note;
+    }
+
     // JOIN SHARE
     public Note joinSharedNote(String shareCode, String email) {
 
@@ -81,4 +101,9 @@ public class NoteService {
     public List<Note> getAllNotes(String email) {
         return noteRepository.findByUserEmail(email);
     }
+
+    public List<Note> getAllPublicNotes() {
+        return noteRepository.findByVisibility(Visibility.PUBLIC);
+    }
+
 }
