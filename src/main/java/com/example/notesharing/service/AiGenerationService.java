@@ -189,6 +189,7 @@ public class AiGenerationService {
         return builder.toString();
     }
 
+
     public GeneratedReport createReport(ReportRequest request) {
         if (request == null) {
             throw new RuntimeException("Report request is required");
@@ -196,8 +197,17 @@ public class AiGenerationService {
         validateEmail(request.getUserEmail());
 
         User user = findUser(request.getUserEmail());
-        Note note = findNote(request.getNoteId());
+
+        // noteId is now optional: the frontend lets the user pick a note OR upload a file.
+        Note note = request.getNoteId() != null ? findNote(request.getNoteId()) : null;
+
+        // resolveSource should prefer request.getSourceContent() (set by the controller
+        // when a file was uploaded and extracted) and fall back to the note's content.
         String source = resolveSource(request.getSourceContent(), note);
+
+        if (source == null || source.isBlank()) {
+            throw new RuntimeException("No source content provided. Select a note or upload a file.");
+        }
 
         GeneratedReport report = new GeneratedReport();
         report.setTitle(defaultValue(request.getTitle(), "Generated Report"));
@@ -205,12 +215,21 @@ public class AiGenerationService {
         report.setUser(user);
         report.setSourceNote(note);
         report.setSourceContent(source);
-        report.setReportType(defaultValue(request.getReportType(), "SUMMARY"));
-        if ("SUMMARY".equalsIgnoreCase(report.getReportType())) {
-            report.setContent(aiService.summarize(source));
-        } else {
-            report.setContent(aiService.generateReport(source));
-        }
+        report.setReportType(defaultValue(request.getReportType(), "REPORT"));
+
+        String content = switch (report.getReportType().toUpperCase()) {
+            case "SUMMARY" -> aiService.summarize(source);
+            case "KEY_POINTS" -> aiService.extractKeyPoints(source);
+            default -> aiService.generateReport(
+                    source,
+                    request.getPrompt(),
+                    request.getDetailLevel(),
+                    request.getWritingStyle(),
+                    request.getReferenceContent()
+            );
+        };
+
+        report.setContent(content);
         report.setCreatedAt(LocalDateTime.now());
         report.setUpdatedAt(LocalDateTime.now());
 
