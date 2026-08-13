@@ -76,12 +76,15 @@
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers(
                                     "/api/auth/**",
+                                    "/api/register",
+                                    "/api/verify-otp",
                                     "/oauth2/**",
                                     "/login/**",
                                     // 🔥 SWAGGER FIX
                                     "/swagger-ui/**",
+                                    "/swagger-ui.html",
                                     "/v3/api-docs/**",
-                                    "/swagger-ui.html"
+                                    "/v3/api-docs.yaml"
                             ).permitAll()
                             .anyRequest().authenticated()
                     )

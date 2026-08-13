@@ -1,5 +1,6 @@
 package com.example.notesharing.Repository;
 
+import com.example.notesharing.Enum.Visibility;
 import com.example.notesharing.modal.Note;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -12,4 +13,6 @@ public interface NoteRepository extends JpaRepository<Note, UUID> {
 
     List<Note> findByUserEmail(String userEmail);
     Optional<Note> findByShareCode(String shareCode);
+
+    List<Note>findByVisibility(Visibility noteVisibility);
 }

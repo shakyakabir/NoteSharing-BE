@@ -2,6 +2,7 @@ package com.example.notesharing.Controller;
 
 import com.example.notesharing.DTO.Request.CreateNoteRequest;
 import com.example.notesharing.DTO.Request.JoinShareRequest;
+import com.example.notesharing.DTO.Request.UpdateNoteRequest;
 import com.example.notesharing.modal.Note;
 import com.example.notesharing.service.NoteService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,9 +35,9 @@ public class NoteController {
     // 3. UPDATE CONTENT (AUTO-SAVE FROM TIPPY)
     @PutMapping("/{id}")
     public Note updateContent(@PathVariable UUID     id,
-                              @RequestBody String content,
+                              @RequestBody UpdateNoteRequest request,
                               @RequestParam String email) {
-        return noteService.updateContent(id, content, email);
+        return noteService.updateContent(id, request.getContent(),request.getTitle(), email);
     }
 
     // 4. JOIN SHARE
@@ -48,5 +49,14 @@ public class NoteController {
     @GetMapping
     public List<Note> getAllNotes(@RequestParam String email) {
         return noteService.getAllNotes(email);
+    }
+
+    @GetMapping("/public")
+    public List<Note> getAllPublicNotes() {
+        return noteService.getAllPublicNotes();
+    }
+    @GetMapping("/public/{id}")
+    public Note get(@PathVariable UUID id) {
+        return noteService.getPublicNote(id);
     }
 }
