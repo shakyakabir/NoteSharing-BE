@@ -35,26 +35,100 @@ public class AiService {
                 .content();
     }
 
-    public String generateReport(String text) {
+    public String generateReport(
+            String sourceText,
+            String userPrompt,
+            Integer detailLevel,
+            String writingStyle,
+            String referenceContent
+    ) {
+        if (sourceText == null || sourceText.isBlank()) {
+            throw new IllegalArgumentException("Cannot generate a report without source content");
+        }
+
+        String detailInstruction = mapDetailLevel(detailLevel);
+        String styleInstruction = mapWritingStyle(writingStyle);
+
+        String userInstructionBlock = (userPrompt != null && !userPrompt.isBlank())
+                ? """
+                  USER GOAL:
+                  The user has specifically asked for the following. Prioritize this over the
+                  default structure below where they conflict (e.g. if they ask for an executive
+                  summary rather than a full report, follow that instead):
+                  %s
+                  """.formatted(userPrompt)
+                : "";
+
+        String referenceBlock = (referenceContent != null && !referenceContent.isBlank())
+                ? """
+                  REFERENCE REPORT TO MIMIC:
+                  Study the structure, section ordering, tone, and formatting conventions of the
+                  reference report below. Reuse that structure and style for the new report.
+                  Do NOT copy its factual content, only its style and structure.
+ 
+                  --- REFERENCE START ---
+                  %s
+                  --- REFERENCE END ---
+                  """.formatted(referenceContent)
+                : "";
 
         String prompt = """
-                Create a professional report using the following note.
-
-                Include:
+                You are an expert report-writing assistant.
+ 
+                Create a professional report based on the source material below.
+ 
+                %s
+                %s
+ 
+                Detail level: %s
+                Writing style: %s
+ 
+                Default structure (use unless the user's goal above calls for something else):
                 - Title
                 - Introduction
                 - Main Discussion
                 - Conclusion
-
-                Note:
+ 
+                SOURCE MATERIAL:
                 %s
-                """.formatted(text);
+                """.formatted(
+                userInstructionBlock,
+                referenceBlock,
+                detailInstruction,
+                styleInstruction,
+                sourceText
+        );
 
         return chatClient.prompt()
                 .user(prompt)
                 .call()
                 .content();
     }
+
+    private String mapDetailLevel(Integer level) {
+        if (level == null) {
+            return "Balanced — moderate depth, cover all key points without excessive elaboration.";
+        }
+        return switch (level) {
+            case 1 -> "Brief — concise, only the most essential points, minimal elaboration.";
+            case 3 -> "Detailed — comprehensive and thorough, with explanations, examples, and nuance.";
+            default -> "Balanced — moderate depth, cover all key points without excessive elaboration.";
+        };
+    }
+
+    private String mapWritingStyle(String style) {
+        if (style == null || style.isBlank()) {
+            return "Professional / Academic — formal, clear, objective tone.";
+        }
+        return switch (style) {
+            case "Casual / Conversational" ->
+                    "Casual / Conversational — friendly, approachable, plain language.";
+            case "Technical / Concise" ->
+                    "Technical / Concise — precise terminology, minimal fluff, dense with information.";
+            default -> "Professional / Academic — formal, clear, objective tone.";
+        };
+    }
+
 
     public String extractKeyPoints(String text) {
 
