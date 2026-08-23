@@ -123,7 +123,7 @@ private EmailService emailService;
         return ApiResponse.builder()
                 .status("200")
                 .message("login success")
-                .data("set cookies")
+                .data(user.getEmail())
                 .build();
     }
 }

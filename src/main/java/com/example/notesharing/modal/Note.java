@@ -40,4 +40,9 @@ public class Note {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    @ManyToOne(optional = true)
+    @JoinColumn(name = "group_id", nullable = true)
+    @JsonIgnore
+    private CollaborationGroup group;
 }
