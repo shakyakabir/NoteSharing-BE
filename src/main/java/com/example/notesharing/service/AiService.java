@@ -145,7 +145,57 @@ public class AiService {
                 .call()
                 .content();
     }
+    public String generateQuizQuestions(String sourceText, String difficulty, int questionCount) {
+        if (sourceText == null || sourceText.isBlank()) {
+            throw new IllegalArgumentException("Cannot generate a quiz without source content");
+        }
 
+        String difficultyGuidance = switch (difficulty == null ? "" : difficulty.toUpperCase()) {
+            case "BEGINNER" ->
+                    "Simple recall questions. Straightforward wording. Distractors should be clearly wrong to anyone who read the note.";
+            case "ADVANCED" ->
+                    "Questions that require connecting two or more ideas from the note, not just single-fact recall.";
+            case "EXPERT" ->
+                    "Challenging application/synthesis questions. Distractors must be highly plausible and require precise understanding to rule out.";
+            default ->
+                    "Moderate difficulty. Some light interpretation required, not pure copy-paste recall.";
+        };
+
+        String prompt = """
+                You are an expert quiz writer.
+ 
+                Create exactly %d multiple-choice questions based ONLY on the note below.
+                Do not invent facts that aren't in the note.
+ 
+                Difficulty: %s
+                Guidance: %s
+ 
+                Rules:
+                - Each question has exactly 4 options.
+                - Exactly one option is correct.
+                - "correctIndex" is the 0-based index of the correct option.
+                - Never hint at or reveal the correct answer inside the question text.
+                - Vary which index holds the correct answer across questions.
+                - Return ONLY valid JSON, with no markdown code fences and no commentary,
+                  matching exactly this schema:
+ 
+                [
+                  {
+                    "question": "string",
+                    "options": ["string", "string", "string", "string"],
+                    "correctIndex": 0
+                  }
+                ]
+ 
+                NOTE:
+                %s
+                """.formatted(questionCount, difficulty, difficultyGuidance, sourceText);
+
+        return chatClient.prompt()
+                .user(prompt)
+                .call()
+                .content();
+    }
     public String generatePresentationJson(
             String sourceContent,
             int slideCount,

@@ -1,14 +1,11 @@
-package com.example.notesharing.DTO;
+package com.example.notesharing.DTO.Request;
 
 import lombok.Builder;
 import lombok.Getter;
-import lombok.Setter;
 
 @Getter
-@Setter
 @Builder
 public class QuizResultDTO {
-
     private int score;
     private int total;
     /** Points actually credited to the player. Always 0 for COLLABORATIVE mode. */

@@ -3,11 +3,20 @@ package com.example.notesharing.Controller;
 import com.example.notesharing.DTO.Request.CreateNoteRequest;
 import com.example.notesharing.DTO.Request.JoinShareRequest;
 import com.example.notesharing.DTO.Request.UpdateNoteRequest;
+import com.example.notesharing.Repository.CollaborationGroupRepository;
+import com.example.notesharing.Repository.GroupMemberRepository;
+import com.example.notesharing.Repository.UserRepository;
+import com.example.notesharing.modal.CollaborationGroup;
+import com.example.notesharing.modal.GroupMember;
 import com.example.notesharing.modal.Note;
 import com.example.notesharing.service.NoteService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +26,9 @@ public class NoteController {
 
     @Autowired
     private NoteService noteService;
+
+
+
 
     // 1. CREATE NOTE (ONLY METADATA)
     @PostMapping
@@ -40,11 +52,6 @@ public class NoteController {
         return noteService.updateContent(id, request.getContent(),request.getTitle(), email);
     }
 
-    // 4. JOIN SHARE
-    @PostMapping("/join")
-    public Note join(@RequestBody JoinShareRequest req) {
-        return noteService.joinSharedNote(req.getShareCode(), req.getUserEmail());
-    }
 
     @GetMapping
     public List<Note> getAllNotes(@RequestParam String email) {
@@ -59,4 +66,30 @@ public class NoteController {
     public Note get(@PathVariable UUID id) {
         return noteService.getPublicNote(id);
     }
+
+//    @PostMapping("/group/{groupId}")
+//    public Note createGroupNote(@RequestBody CreateNoteRequest req,
+//                                @PathVariable UUID groupId,
+//                                @RequestParam String email) {
+//        return noteService.createGroupNote(req, groupId, email);
+//    }
+
+    @PutMapping("/group/{groupId}")
+    public ResponseEntity<Note> updateGroupNote(
+            @PathVariable UUID groupId,
+            @RequestBody CreateNoteRequest req,
+            @RequestParam String email
+    ) {
+        Note updated = noteService.updateGroupNote(groupId, req, email);
+        return ResponseEntity.ok(updated);
+    }
+    @GetMapping("/groups/{groupId}")
+    public ResponseEntity<Note> getLatestGroupNote(
+            @PathVariable UUID groupId,
+            @RequestParam String email
+    ) {
+        return ResponseEntity.ok(noteService.getLatestGroupNote(groupId, email));
+    }
+
+
 }
