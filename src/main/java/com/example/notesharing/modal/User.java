@@ -1,5 +1,6 @@
 package com.example.notesharing.modal;
 
+import com.example.notesharing.Enum.SubscriptionTier;
 import com.example.notesharing.Enum.UserRole;
 import jakarta.persistence.*;
 import lombok.*;
@@ -40,6 +41,20 @@ public class User {
     @Builder.Default
     @Column(name ="streak_days", columnDefinition = "INT DEFAULT 0")
     private int streakDays=0;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subscription_tier")
+    @Builder.Default
+    private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
+
+    @Column(name = "subscription_start_at")
+    private Instant subscriptionStartAt;
+
+    @Column(name = "subscription_end_at")
+    private Instant subscriptionEndAt;
+    @Builder.Default
+    @Column(name = "ai_quota_limit", columnDefinition = "INT DEFAULT 0")
+    private int aiQuotaLimit = 0;
+
     @Builder.Default
     @Column(name = "ai_quota_used", columnDefinition = "INT DEFAULT 0")
     private int aiQuotaUsed = 0;

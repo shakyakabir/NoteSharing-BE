@@ -88,7 +88,10 @@
                                     "/swagger-ui/**",
                                     "/swagger-ui.html",
                                     "/v3/api-docs/**",
-                                    "/v3/api-docs.yaml"
+                                    "/v3/api-docs.yaml",
+                                    // eSewa
+                                    "/api/subscriptions/payment/esewa/success",
+                                    "/api/subscriptions/payment/esewa/failure"
                             ).permitAll()
                             .requestMatchers("/api/admin/**").hasRole("ADMIN")
                             .anyRequest().authenticated()
