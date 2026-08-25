@@ -28,6 +28,19 @@ public class RewardItem {
 
     private String rewardType;
 
+    @Builder.Default
+    @Column(name = "ai_cost", columnDefinition = "INT DEFAULT 0")
+    private int aiCost = 0;
+
+    @Builder.Default
+    @Column(name = "max_uses", columnDefinition = "INT DEFAULT 0")
+    private int maxUses = 0;
+
+    /** Lifecycle status shown/edited in the admin Point Shop: ACTIVE | DRAFT | SUSPENDED. */
+    @Builder.Default
+    @Column(columnDefinition = "VARCHAR(20) DEFAULT 'ACTIVE'")
+    private String status = "ACTIVE";
+
     private boolean active;
 
     private LocalDateTime createdAt;

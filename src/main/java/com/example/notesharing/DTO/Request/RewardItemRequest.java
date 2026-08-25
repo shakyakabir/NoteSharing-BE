@@ -11,4 +11,7 @@ public class RewardItemRequest {
     private String description;
     private int cost;
     private String rewardType;
+    private int aiCost;
+    private int maxUses;
+    private String status;
 }

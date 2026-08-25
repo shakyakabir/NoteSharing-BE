@@ -2,8 +2,10 @@ package com.example.notesharing.Controller;
 
 import com.example.notesharing.DTO.CreditStatusDTO;
 import com.example.notesharing.DTO.SubscriptionDTO;
+import com.example.notesharing.DTO.SubscriptionPlanDTO;
 import com.example.notesharing.modal.CreditTransaction;
 import com.example.notesharing.service.AiCreditService;
+import com.example.notesharing.service.SubscriptionPlanService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +23,9 @@ public class AiCreditController {
 
     @Autowired
     private AiCreditService aiCreditService;
+
+    @Autowired
+    private SubscriptionPlanService subscriptionPlanService;
 
     @GetMapping("/ai/credits")
     public CreditStatusDTO getCredits() {
@@ -40,6 +45,12 @@ public class AiCreditController {
     @GetMapping("/subscription")
     public SubscriptionDTO getSubscription() {
         return aiCreditService.subscription();
+    }
+
+    /** Active admin-configured plans for the user-facing pricing surface (auth required, any user). */
+    @GetMapping("/subscription/plans")
+    public List<SubscriptionPlanDTO> getPlans() {
+        return subscriptionPlanService.listActive();
     }
 
     @PostMapping("/subscription/upgrade")

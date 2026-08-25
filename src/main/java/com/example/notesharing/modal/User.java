@@ -1,5 +1,6 @@
 package com.example.notesharing.modal;
 
+import com.example.notesharing.Enum.UserRole;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -53,6 +54,11 @@ public class User {
     @Builder.Default
     @Column(name = "email_verified", columnDefinition = "BOOLEAN DEFAULT false")
     private boolean emailVerified = false;
+
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(name = "role", columnDefinition = "VARCHAR(20) DEFAULT 'USER'")
+    private UserRole role = UserRole.USER;
 
 
     @CreationTimestamp

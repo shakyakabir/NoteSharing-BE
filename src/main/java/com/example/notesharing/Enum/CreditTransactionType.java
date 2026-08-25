@@ -4,5 +4,6 @@ public enum CreditTransactionType {
     GRANT,
     CONSUME,
     REFUND,
-    REFRESH
+    REFRESH,
+    ADJUST
 }
