@@ -4,6 +4,7 @@ import com.example.notesharing.DTO.Request.PresentationRequest;
 import com.example.notesharing.DTO.Request.ReportRequest;
 import com.example.notesharing.DTO.Response.Presentation.PresentationContent;
 import com.example.notesharing.DTO.Response.Presentation.SlideContent;
+import com.example.notesharing.Enum.AiFeature;
 import com.example.notesharing.Repository.GeneratedPresentationRepository;
 import com.example.notesharing.Repository.GeneratedReportRepository;
 import com.example.notesharing.Repository.NoteRepository;
@@ -42,6 +43,9 @@ public class AiGenerationService {
     @Autowired
     private ObjectMapper objectMapper; // com.fasterxml.jackson.databind.ObjectMapper
 
+    @Autowired
+    private AiCreditService creditService;
+
     public GeneratedPresentation createPresentation(PresentationRequest request) {
         if (request == null) {
             throw new RuntimeException("Presentation request is required");
@@ -55,6 +59,10 @@ public class AiGenerationService {
         int slideCount = resolveSlideCount(request.getSlideCount());
         String theme = defaultValue(request.getTheme(), "Clean");
         String template = defaultValue(request.getTemplateName(), "Study Deck");
+
+        // Charge credits up-front (reservation); refund below if generation fails.
+        creditService.consume(AiFeature.PPT);
+        try {
         PresentationContent aiContent = generateStructuredContent(source, slideCount, theme,template);
 
         GeneratedPresentation presentation = new GeneratedPresentation();
@@ -116,6 +124,10 @@ public class AiGenerationService {
             presentation.getSlides().add(slide);
         }
         return presentationRepository.save(presentation);
+        } catch (RuntimeException e) {
+            creditService.refund(AiFeature.PPT);
+            throw e;
+        }
         }
     private int resolveSlideCount(Integer requested) {
         if (requested == null) return 5;
@@ -217,23 +229,31 @@ public class AiGenerationService {
         report.setSourceContent(source);
         report.setReportType(defaultValue(request.getReportType(), "REPORT"));
 
-        String content = switch (report.getReportType().toUpperCase()) {
-            case "SUMMARY" -> aiService.summarize(source);
-            case "KEY_POINTS" -> aiService.extractKeyPoints(source);
-            default -> aiService.generateReport(
-                    source,
-                    request.getPrompt(),
-                    request.getDetailLevel(),
-                    request.getWritingStyle(),
-                    request.getReferenceContent()
-            );
-        };
+        // Cost depends on report type (summary / key-points / full report). Charge up-front, refund on failure.
+        AiFeature feature = AiFeature.fromReportType(report.getReportType());
+        creditService.consume(feature);
+        try {
+            String content = switch (report.getReportType().toUpperCase()) {
+                case "SUMMARY" -> aiService.summarize(source);
+                case "KEY_POINTS" -> aiService.extractKeyPoints(source);
+                default -> aiService.generateReport(
+                        source,
+                        request.getPrompt(),
+                        request.getDetailLevel(),
+                        request.getWritingStyle(),
+                        request.getReferenceContent()
+                );
+            };
 
-        report.setContent(content);
-        report.setCreatedAt(LocalDateTime.now());
-        report.setUpdatedAt(LocalDateTime.now());
+            report.setContent(content);
+            report.setCreatedAt(LocalDateTime.now());
+            report.setUpdatedAt(LocalDateTime.now());
 
-        return reportRepository.save(report);
+            return reportRepository.save(report);
+        } catch (RuntimeException e) {
+            creditService.refund(feature);
+            throw e;
+        }
     }
 
     public List<GeneratedReport> getReports(String email) {

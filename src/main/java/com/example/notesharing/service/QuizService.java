@@ -4,6 +4,7 @@ package com.example.notesharing.service;
 import com.example.notesharing.DTO.QuizResultDTO;
 import com.example.notesharing.DTO.Request.GeneratedQuizQuestion;
 import com.example.notesharing.DTO.Request.QuizAnswerRequest;
+import com.example.notesharing.Enum.AiFeature;
 import com.example.notesharing.Enum.Difficulty;
 import com.example.notesharing.Enum.QuizMode;
 import com.example.notesharing.Repository.QuizRepository;
@@ -38,6 +39,9 @@ public class QuizService {
     @Autowired
     private UserScoreService userScoreService;
 
+    @Autowired
+    private AiCreditService creditService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -60,37 +64,44 @@ public class QuizService {
         Difficulty difficulty = Difficulty.fromString(difficultyStr);
         QuizMode mode = QuizMode.fromString(modeStr);
 
-        // NOTE: this MUST be GeneratedQuizQuestion (question/options/correctIndex from the AI),
-        // never QuizAnswerRequest (questionIndex/answer, submitted later by the player).
-        List<GeneratedQuizQuestion> generated = generateQuestions(sourceText, difficulty);
+        // Charge credits up-front (reservation); refund below if generation fails.
+        creditService.consume(AiFeature.QUIZ);
+        try {
+            // NOTE: this MUST be GeneratedQuizQuestion (question/options/correctIndex from the AI),
+            // never QuizAnswerRequest (questionIndex/answer, submitted later by the player).
+            List<GeneratedQuizQuestion> generated = generateQuestions(sourceText, difficulty);
 
-        List<Map<String, Object>> questionsForStorage = new ArrayList<>();
-        List<String> answerKey = new ArrayList<>();
+            List<Map<String, Object>> questionsForStorage = new ArrayList<>();
+            List<String> answerKey = new ArrayList<>();
 
-        for (GeneratedQuizQuestion q : generated) {
-            ShuffledOptions shuffled = shuffleOptions(q.getOptions(), q.getCorrectIndex());
+            for (GeneratedQuizQuestion q : generated) {
+                ShuffledOptions shuffled = shuffleOptions(q.getOptions(), q.getCorrectIndex());
 
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("question", q.getQuestion());
-            item.put("options", shuffled.options());
-            questionsForStorage.add(item);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("question", q.getQuestion());
+                item.put("options", shuffled.options());
+                questionsForStorage.add(item);
 
-            answerKey.add(indexToLetter(shuffled.correctIndex()));
+                answerKey.add(indexToLetter(shuffled.correctIndex()));
+            }
+
+            Quiz quiz = new Quiz();
+            quiz.setUserEmail(email);
+            quiz.setSourceText(sourceText);
+            quiz.setQuestionsJson(writeJson(questionsForStorage));
+            quiz.setAnswerKeyJson(writeJson(answerKey));
+            quiz.setDifficulty(difficulty);
+            quiz.setMode(mode);
+            quiz.setPointsPerCompletion(difficulty.getPoints());
+            quiz.setNotebookId(notebookId);
+            quiz.setCreatedAt(LocalDateTime.now());
+            quiz.setUpdatedAt(LocalDateTime.now());
+
+            return quizRepository.save(quiz);
+        } catch (RuntimeException e) {
+            creditService.refund(AiFeature.QUIZ);
+            throw e;
         }
-
-        Quiz quiz = new Quiz();
-        quiz.setUserEmail(email);
-        quiz.setSourceText(sourceText);
-        quiz.setQuestionsJson(writeJson(questionsForStorage));
-        quiz.setAnswerKeyJson(writeJson(answerKey));
-        quiz.setDifficulty(difficulty);
-        quiz.setMode(mode);
-        quiz.setPointsPerCompletion(difficulty.getPoints());
-        quiz.setNotebookId(notebookId);
-        quiz.setCreatedAt(LocalDateTime.now());
-        quiz.setUpdatedAt(LocalDateTime.now());
-
-        return quizRepository.save(quiz);
     }
 
     public Quiz getQuiz(UUID id) {
