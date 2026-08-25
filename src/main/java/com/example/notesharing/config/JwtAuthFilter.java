@@ -45,6 +45,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         // ❌ NO TOKEN → BLOCK
+//        if (token == null) {
+//            filterChain.doFilter(request, response);
+//            return;
+//        }
         if (token == null) {
             filterChain.doFilter(request, response);
             return;
