@@ -10,11 +10,14 @@ import com.example.notesharing.Enum.SubscriptionStatus;
 import com.example.notesharing.Repository.AiSubscriptionRepository;
 import com.example.notesharing.Repository.CreditTransactionRepository;
 import com.example.notesharing.Repository.PointTransactionRepository;
+import com.example.notesharing.Repository.SubscriptionPlanConfigRepository;
 import com.example.notesharing.Repository.UserRepository;
+import com.example.notesharing.exception.ApiCodedException;
 import com.example.notesharing.exception.InsufficientCreditsException;
 import com.example.notesharing.modal.AiSubscription;
 import com.example.notesharing.modal.CreditTransaction;
 import com.example.notesharing.modal.PointTransaction;
+import com.example.notesharing.modal.SubscriptionPlanConfig;
 import com.example.notesharing.modal.User;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Owns all AI credit + subscription logic. The backend is the sole source of truth: the identity
@@ -52,6 +56,9 @@ public class AiCreditService {
 
     @Autowired
     private AiCreditPolicy policy;
+
+    @Autowired
+    private SubscriptionPlanConfigRepository planConfigRepository;
 
     // ---- Public read API (identity from JWT session) --------------------------------------
 
@@ -93,6 +100,12 @@ public class AiCreditService {
         String email = currentEmail();
         AiSubscription sub = refreshIfDue(getOrCreate(email));
         User user = sub.getUser();
+
+        // Feature-access gate (backend-enforced): premium-only features require the PREMIUM tier.
+        if (policy.isPremiumOnly(feature) && sub.getPlan() != SubscriptionPlan.PREMIUM) {
+            throw ApiCodedException.featureNotAvailable();
+        }
+
         int cost = policy.costOf(feature);
 
         int rows = aiSubscriptionRepository.tryConsume(email, cost);
@@ -145,22 +158,79 @@ public class AiCreditService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         savePointTransaction(user, PointTransactionType.REDEEMED, -price, "Premium subscription");
 
-        AiCreditPolicy.PlanConfig premium = policy.planConfig(SubscriptionPlan.PREMIUM);
+        SubscriptionPlanConfig premiumConfig = planConfigRepository
+                .findFirstByTierAndActiveTrueOrderBySortOrderAsc(SubscriptionPlan.PREMIUM).orElse(null);
+        int credits = premiumConfig != null ? premiumConfig.getCreditAllowance() : policy.getPremiumCredits();
+        int refreshDays = premiumConfig != null ? premiumConfig.getRefreshDays() : policy.getPremiumRefreshDays();
         LocalDateTime now = LocalDateTime.now();
+        sub.setPlanConfig(premiumConfig);
         sub.setPlan(SubscriptionPlan.PREMIUM);
         sub.setStatus(SubscriptionStatus.ACTIVE);
-        sub.setMaxCredits(premium.credits());
-        sub.setCurrentCredits(premium.credits());
+        sub.setMaxCredits(credits);
+        sub.setCurrentCredits(credits);
         sub.setLastRefresh(now);
-        sub.setNextRefresh(now.plusDays(premium.refreshDays()));
+        sub.setNextRefresh(now.plusDays(refreshDays));
         sub.setSubscriptionStartDate(now);
         sub.setSubscriptionEndDate(now.plusDays(policy.getPremiumDurationDays()));
         aiSubscriptionRepository.save(sub);
 
-        saveCreditTransaction(email, user, null, CreditTransactionType.GRANT, premium.credits(),
-                premium.credits(), "Premium activated");
+        saveCreditTransaction(email, user, null, CreditTransactionType.GRANT, credits,
+                credits, "Premium activated");
 
         return toSubscription(sub, user.getPointBalance());
+    }
+
+    // ---- Admin operations (target user by email; the admin identity is enforced by Spring Security) ----
+
+    /**
+     * Admin: move a user onto a specific plan. Resets the balance to the new allowance (a plan
+     * change is a fresh grant) and recomputes the schedule; the append-only ledger preserves the
+     * full history. Sets / clears the premium window from the plan's tier. Never negative.
+     */
+    @Transactional
+    public AiSubscription changeUserPlan(String email, UUID planConfigId) {
+        AiSubscription sub = refreshIfDue(getOrCreate(email));
+        SubscriptionPlanConfig config = planConfigRepository.findById(planConfigId)
+                .orElseThrow(ApiCodedException::invalidPlan);
+
+        LocalDateTime now = LocalDateTime.now();
+        sub.setPlanConfig(config);
+        sub.setPlan(config.getTier());
+        sub.setStatus(SubscriptionStatus.ACTIVE);
+        sub.setMaxCredits(config.getCreditAllowance());
+        sub.setCurrentCredits(config.getCreditAllowance());
+        sub.setLastRefresh(now);
+        sub.setNextRefresh(config.getRefreshDays() > 0 ? now.plusDays(config.getRefreshDays()) : null);
+        if (config.getTier() == SubscriptionPlan.PREMIUM) {
+            sub.setSubscriptionStartDate(now);
+            sub.setSubscriptionEndDate(now.plusDays(policy.getPremiumDurationDays()));
+        } else {
+            sub.setSubscriptionStartDate(null);
+            sub.setSubscriptionEndDate(null);
+        }
+        aiSubscriptionRepository.save(sub);
+
+        saveCreditTransaction(email, sub.getUser(), null, CreditTransactionType.GRANT,
+                config.getCreditAllowance(), config.getCreditAllowance(),
+                "Plan changed to " + config.getName());
+        return sub;
+    }
+
+    /**
+     * Admin: adjust a user's balance by {@code delta} (may be negative). Clamps at 0 so the balance
+     * is never negative, and logs an ADJUST ledger entry with the amount actually applied.
+     */
+    @Transactional
+    public AiSubscription adjustCredits(String email, int delta, String reason) {
+        AiSubscription sub = refreshIfDue(getOrCreate(email));
+        int updated = Math.max(0, sub.getCurrentCredits() + delta);
+        int applied = updated - sub.getCurrentCredits();
+        sub.setCurrentCredits(updated);
+        aiSubscriptionRepository.save(sub);
+
+        saveCreditTransaction(email, sub.getUser(), null, CreditTransactionType.ADJUST, applied, updated,
+                (reason == null || reason.isBlank()) ? "Admin credit adjustment" : reason);
+        return sub;
     }
 
     // ---- Internals ------------------------------------------------------------------------
@@ -174,17 +244,23 @@ public class AiCreditService {
                 .orElseGet(() -> {
                     User user = userRepository.findByEmail(email)
                             .orElseThrow(() -> new RuntimeException("User not found"));
-                    AiCreditPolicy.PlanConfig free = policy.planConfig(SubscriptionPlan.FREE);
+                    SubscriptionPlanConfig freeConfig = planConfigRepository
+                            .findFirstByTierAndActiveTrueOrderBySortOrderAsc(SubscriptionPlan.FREE).orElse(null);
+                    int credits = freeConfig != null ? freeConfig.getCreditAllowance()
+                            : policy.planConfig(SubscriptionPlan.FREE).credits();
+                    int refreshDays = freeConfig != null ? freeConfig.getRefreshDays()
+                            : policy.planConfig(SubscriptionPlan.FREE).refreshDays();
                     LocalDateTime now = LocalDateTime.now();
                     AiSubscription sub = AiSubscription.builder()
                             .userEmail(email)
                             .user(user)
                             .plan(SubscriptionPlan.FREE)
+                            .planConfig(freeConfig)
                             .status(SubscriptionStatus.ACTIVE)
-                            .currentCredits(free.credits())
-                            .maxCredits(free.credits())
+                            .currentCredits(credits)
+                            .maxCredits(credits)
                             .lastRefresh(now)
-                            .nextRefresh(now.plusDays(free.refreshDays()))
+                            .nextRefresh(now.plusDays(refreshDays))
                             .autoRenew(false)
                             .build();
                     return aiSubscriptionRepository.save(sub);
@@ -204,21 +280,34 @@ public class AiCreditService {
         if (sub.getPlan() == SubscriptionPlan.PREMIUM
                 && sub.getSubscriptionEndDate() != null
                 && now.isAfter(sub.getSubscriptionEndDate())) {
-            AiCreditPolicy.PlanConfig free = policy.planConfig(SubscriptionPlan.FREE);
+            // Premium window elapsed -> downgrade to the default FREE plan (config-driven, else policy).
+            SubscriptionPlanConfig freeConfig = planConfigRepository
+                    .findFirstByTierAndActiveTrueOrderBySortOrderAsc(SubscriptionPlan.FREE).orElse(null);
+            int freeCredits = freeConfig != null ? freeConfig.getCreditAllowance()
+                    : policy.planConfig(SubscriptionPlan.FREE).credits();
+            int freeRefreshDays = freeConfig != null ? freeConfig.getRefreshDays()
+                    : policy.planConfig(SubscriptionPlan.FREE).refreshDays();
+            sub.setPlanConfig(freeConfig);
             sub.setPlan(SubscriptionPlan.FREE);
             sub.setStatus(SubscriptionStatus.EXPIRED);
-            sub.setMaxCredits(free.credits());
-            if (sub.getCurrentCredits() > free.credits()) {
-                sub.setCurrentCredits(free.credits());
+            sub.setMaxCredits(freeCredits);
+            if (sub.getCurrentCredits() > freeCredits) {
+                sub.setCurrentCredits(freeCredits);
             }
             sub.setLastRefresh(now);
-            sub.setNextRefresh(now.plusDays(free.refreshDays()));
+            sub.setNextRefresh(freeRefreshDays > 0 ? now.plusDays(freeRefreshDays) : null);
             changed = true;
         }
 
-        int refreshDays = policy.planConfig(sub.getPlan()).refreshDays();
+        int refreshDays = refreshDaysOf(sub);
         boolean refreshed = false;
-        if (sub.getNextRefresh() == null) {
+        if (refreshDays <= 0) {
+            // Non-refreshing plan (e.g. an unlimited / one-off config): leave the schedule untouched.
+            if (sub.getNextRefresh() != null) {
+                sub.setNextRefresh(null);
+                changed = true;
+            }
+        } else if (sub.getNextRefresh() == null) {
             sub.setLastRefresh(now);
             sub.setNextRefresh(now.plusDays(refreshDays));
             changed = true;
@@ -244,6 +333,13 @@ public class AiCreditService {
             }
         }
         return sub;
+    }
+
+    /** Refresh cadence (days) for a subscription: its plan config when set, else the policy default. */
+    private int refreshDaysOf(AiSubscription sub) {
+        return sub.getPlanConfig() != null
+                ? sub.getPlanConfig().getRefreshDays()
+                : policy.planConfig(sub.getPlan()).refreshDays();
     }
 
     private void saveCreditTransaction(String userEmail, User user, AiFeature feature,
@@ -279,7 +375,7 @@ public class AiCreditService {
                 .status(sub.getStatus().name())
                 .currentCredits(sub.getCurrentCredits())
                 .maxCredits(sub.getMaxCredits())
-                .refreshDays(policy.planConfig(sub.getPlan()).refreshDays())
+                .refreshDays(refreshDaysOf(sub))
                 .nextRefresh(sub.getNextRefresh())
                 .daysUntilRefresh(daysUntil(sub.getNextRefresh()))
                 .build();
@@ -291,7 +387,7 @@ public class AiCreditService {
                 .status(sub.getStatus().name())
                 .currentCredits(sub.getCurrentCredits())
                 .maxCredits(sub.getMaxCredits())
-                .refreshDays(policy.planConfig(sub.getPlan()).refreshDays())
+                .refreshDays(refreshDaysOf(sub))
                 .nextRefresh(sub.getNextRefresh())
                 .subscriptionStartDate(sub.getSubscriptionStartDate())
                 .subscriptionEndDate(sub.getSubscriptionEndDate())

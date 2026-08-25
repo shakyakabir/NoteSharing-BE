@@ -43,6 +43,7 @@
     package com.example.notesharing.config;
     
     import com.example.notesharing.service.JwtService;
+    import com.example.notesharing.Repository.UserRepository;
     import jakarta.servlet.http.Cookie;
     import jakarta.servlet.http.HttpServletResponse;
     import org.springframework.context.annotation.Bean;
@@ -57,9 +58,11 @@
     public class SecurityConfig {
     
         private final JwtService jwtService;
-    
-        public SecurityConfig(JwtService jwtService) {
+        private final UserRepository userRepository;
+
+        public SecurityConfig(JwtService jwtService, UserRepository userRepository) {
             this.jwtService = jwtService;
+            this.userRepository = userRepository;
         }
     
         @Bean
@@ -68,10 +71,11 @@
             http
                     .cors(cors -> {})
                     .csrf(csrf -> csrf.disable())
-                    .exceptionHandling(exception ->
-                            exception.authenticationEntryPoint((request, response, authException) -> {
-                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            })
+                    .exceptionHandling(exception -> exception
+                            .authenticationEntryPoint((request, response, authException) ->
+                                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
+                            .accessDeniedHandler((request, response, accessDeniedException) ->
+                                    response.setStatus(HttpServletResponse.SC_FORBIDDEN))
                     )
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers(
@@ -86,6 +90,7 @@
                                     "/v3/api-docs/**",
                                     "/v3/api-docs.yaml"
                             ).permitAll()
+                            .requestMatchers("/api/admin/**").hasRole("ADMIN")
                             .anyRequest().authenticated()
                     )
     
@@ -121,7 +126,7 @@
                     .sessionManagement(session ->
                             session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                     )
-             .addFilterBefore(new JwtAuthFilter(jwtService),
+             .addFilterBefore(new JwtAuthFilter(jwtService, userRepository),
                     UsernamePasswordAuthenticationFilter.class);
 
     

@@ -72,7 +72,11 @@ public class RewardService {
         reward.setDescription(request.getDescription());
         reward.setCost(request.getCost());
         reward.setRewardType(request.getRewardType());
-        reward.setActive(true);
+        reward.setAiCost(Math.max(0, request.getAiCost()));
+        reward.setMaxUses(Math.max(0, request.getMaxUses()));
+        String status = normalizeStatus(request.getStatus());
+        reward.setStatus(status);
+        reward.setActive("ACTIVE".equals(status));
         reward.setCreatedAt(LocalDateTime.now());
 
         return rewardItemRepository.save(reward);
@@ -80,6 +84,43 @@ public class RewardService {
 
     public List<RewardItem> getRewards() {
         return rewardItemRepository.findByActiveTrue();
+    }
+
+    /** Admin: every reward regardless of status (self-service {@link #getRewards()} shows ACTIVE only). */
+    public List<RewardItem> getAllRewards() {
+        return rewardItemRepository.findAll();
+    }
+
+    /** Admin: edit an existing reward. Keeps {@code active} in sync with {@code status}. */
+    public RewardItem updateReward(UUID id, RewardItemRequest request) {
+        if (request == null) {
+            throw new RuntimeException("Reward request is required");
+        }
+        RewardItem reward = rewardItemRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Reward not found"));
+
+        if (request.getTitle() != null && !request.getTitle().isBlank()) {
+            reward.setTitle(request.getTitle());
+        }
+        reward.setDescription(request.getDescription());
+        if (request.getCost() > 0) {
+            reward.setCost(request.getCost());
+        }
+        reward.setRewardType(request.getRewardType());
+        reward.setAiCost(Math.max(0, request.getAiCost()));
+        reward.setMaxUses(Math.max(0, request.getMaxUses()));
+        String status = normalizeStatus(request.getStatus());
+        reward.setStatus(status);
+        reward.setActive("ACTIVE".equals(status));
+
+        return rewardItemRepository.save(reward);
+    }
+
+    /** Admin: hard-delete a reward. */
+    public void deleteReward(UUID id) {
+        RewardItem reward = rewardItemRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Reward not found"));
+        rewardItemRepository.delete(reward);
     }
 
     public RewardPurchase redeemReward(UUID rewardId, String email) {
@@ -136,5 +177,17 @@ public class RewardService {
             throw new RuntimeException(message);
         }
         return value;
+    }
+
+    /** Normalize a reward status to one of ACTIVE | DRAFT | SUSPENDED, defaulting to ACTIVE. */
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "ACTIVE";
+        }
+        String normalized = status.trim().toUpperCase();
+        return switch (normalized) {
+            case "ACTIVE", "DRAFT", "SUSPENDED" -> normalized;
+            default -> "ACTIVE";
+        };
     }
 }

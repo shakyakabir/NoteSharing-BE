@@ -38,6 +38,15 @@ public class AiSubscription {
     @Builder.Default
     private SubscriptionPlan plan = SubscriptionPlan.FREE;
 
+    /**
+     * The admin-configured plan this subscription is on (nullable for legacy rows / pre-seed FREE
+     * creation). When set, its allowance + refresh cadence drive enforcement; {@link #plan} still
+     * mirrors {@code planConfig.tier} so every existing {@code plan == PREMIUM} check keeps working.
+     */
+    @ManyToOne
+    @JoinColumn(name = "plan_config_id")
+    private SubscriptionPlanConfig planConfig;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private SubscriptionStatus status = SubscriptionStatus.ACTIVE;

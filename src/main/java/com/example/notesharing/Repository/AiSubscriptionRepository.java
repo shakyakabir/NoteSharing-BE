@@ -1,11 +1,14 @@
 package com.example.notesharing.Repository;
 
+import com.example.notesharing.Enum.SubscriptionPlan;
+import com.example.notesharing.Enum.SubscriptionStatus;
 import com.example.notesharing.modal.AiSubscription;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,4 +35,16 @@ public interface AiSubscriptionRepository extends JpaRepository<AiSubscription, 
     @Query("UPDATE AiSubscription s SET s.currentCredits = s.currentCredits + :amount " +
             "WHERE s.userEmail = :email")
     int incrementCredits(@Param("email") String email, @Param("amount") int amount);
+
+    // ---- Admin analytics / dashboard aggregates -------------------------------------------
+
+    long countByPlan(SubscriptionPlan plan);
+
+    long countByStatus(SubscriptionStatus status);
+
+    /** How many subscriptions reference a plan - decides soft- vs hard-delete when an admin removes it. */
+    long countByPlanConfig_Id(UUID planConfigId);
+
+    /** Batch-load subscriptions for a page of users (avoids an N+1 join in the admin users list). */
+    List<AiSubscription> findByUserEmailIn(List<String> userEmails);
 }
