@@ -88,6 +88,15 @@ public class AiCreditService {
         return costs;
     }
 
+    /** Per-feature premium-only flags, so the UI can proactively lock premium tools for free users. */
+    public Map<String, Boolean> featureAccess() {
+        Map<String, Boolean> access = new LinkedHashMap<>();
+        for (AiFeature feature : AiFeature.values()) {
+            access.put(feature.name(), policy.isPremiumOnly(feature));
+        }
+        return access;
+    }
+
     // ---- Credit consumption (called from the AI generation services) ----------------------
 
     /**

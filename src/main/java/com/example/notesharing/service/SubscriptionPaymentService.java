@@ -44,6 +44,9 @@ public class SubscriptionPaymentService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private AiCreditService aiCreditService;
+
 
     // =========================================================
     // ESEWA CONFIGURATION
@@ -434,6 +437,15 @@ public class SubscriptionPaymentService {
         // ============================================
 
         userRepository.save(user);
+
+        // ============================================
+        // ACTIVATE AI SUBSCRIPTION (Model A)
+        // ============================================
+        // The profile fields above only drive /api/user/profile. The AI credit + premium-feature
+        // gate reads the AiSubscription record, so mirror the paid plan onto it (resets credits to
+        // the plan allowance, sets the premium window, logs a GRANT). Without this a paying user
+        // stays FREE for the gate and premium-only tools remain locked.
+        aiCreditService.changeUserPlan(payment.getUserEmail(), plan.getId());
     }
     public void handleEsewaSuccess(String encodedData) {
 

@@ -5,8 +5,11 @@ import com.example.notesharing.DTO.Request.SubscriptionCheckoutRequest;
 import com.example.notesharing.DTO.Response.payment.PaymentInitiationResponse;
 import com.example.notesharing.service.SubscriptionPaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
 
 @RestController
 @RequestMapping("/api")
@@ -45,9 +48,10 @@ public class SubscriptionPaymentController {
         try {
             subscriptionPaymentService.handleEsewaSuccess(data);
 
-            return ResponseEntity.ok(
-                    "eSewa payment successful. Subscription activated."
-            );
+            return ResponseEntity
+                    .status(HttpStatus.FOUND)
+                    .location(URI.create("http://localhost:3000/subscription"))
+                    .build();   
 
         } catch (Exception e) {
 

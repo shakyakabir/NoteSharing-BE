@@ -42,6 +42,11 @@ public class AiCreditController {
         return aiCreditService.featureCosts();
     }
 
+    @GetMapping("/ai/feature-access")
+    public Map<String, Boolean> getFeatureAccess() {
+        return aiCreditService.featureAccess();
+    }
+
     @GetMapping("/subscription")
     public SubscriptionDTO getSubscription() {
         return aiCreditService.subscription();
