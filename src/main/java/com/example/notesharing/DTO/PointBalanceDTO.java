@@ -13,4 +13,5 @@ public class PointBalanceDTO {
     private int pointBalance;
     private int streakDays;
     private int aiQuotaUsed;
+    private Integer quizCount;
 }

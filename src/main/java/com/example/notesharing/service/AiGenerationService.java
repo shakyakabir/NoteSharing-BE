@@ -10,10 +10,15 @@ import com.example.notesharing.Repository.GeneratedReportRepository;
 import com.example.notesharing.Repository.NoteRepository;
 import com.example.notesharing.Repository.UserRepository;
 import com.example.notesharing.modal.*;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +51,24 @@ public class AiGenerationService {
     @Autowired
     private AiCreditService creditService;
 
+    private String extractPdfText(MultipartFile file) {
+        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+
+            PDFTextStripper stripper = new PDFTextStripper();
+
+            String text = stripper.getText(document);
+
+            if (text == null || text.isBlank()) {
+                throw new RuntimeException("Could not extract text from PDF");
+            }
+
+            return text;
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read PDF file", e);
+        }
+    }
+
     public GeneratedPresentation createPresentation(PresentationRequest request) {
         if (request == null) {
             throw new RuntimeException("Presentation request is required");
@@ -54,22 +77,24 @@ public class AiGenerationService {
 
         User user = findUser(request.getUserEmail());
         Note note = findNote(request.getNoteId());
-        String source = resolveSource(request.getSourceContent(), note);
+        String source = resolveSource(request.getSourceContent(), note,request.getSourceFile());
 
         int slideCount = resolveSlideCount(request.getSlideCount());
         String theme = defaultValue(request.getTheme(), "Clean");
+        String visualTheme = defaultValue(request.getVisualTheme(), "howlite");
         String template = defaultValue(request.getTemplateName(), "Study Deck");
 
         // Charge credits up-front (reservation); refund below if generation fails.
         creditService.consume(AiFeature.PPT);
         try {
-        PresentationContent aiContent = generateStructuredContent(source, slideCount, theme,template);
+        PresentationContent aiContent = generateStructuredContent(source, slideCount,theme, visualTheme,template);
 
         GeneratedPresentation presentation = new GeneratedPresentation();
         presentation.setTitle(defaultValue(request.getTitle(), aiContent.title()));
         presentation.setUserEmail(request.getUserEmail());
         presentation.setUser(user);
         presentation.setSourceNote(note);
+        presentation.setVisualTheme(visualTheme);
         presentation.setSourceContent(source);
         presentation.setTheme(theme);
         presentation.setTemplateName(defaultValue(request.getTemplateName(), "Study Deck"));
@@ -97,7 +122,8 @@ public class AiGenerationService {
             String imageUrl = null;
             String imagePrompt = null;
 
-            if (slideContent.image() != null
+            if (includeImages
+                    &&slideContent.image() != null
                     && slideContent.image().required()
                     && slideContent.image().prompt() != null
                     && !slideContent.image().prompt().isBlank()) {
@@ -157,10 +183,12 @@ public class AiGenerationService {
     private PresentationContent generateStructuredContent(String source,
                                                           int slideCount,
                                                           String theme,
+                                                          String visualTheme,
                                                           String template) {
         String rawJson = aiService.generatePresentationJson(  source,
                 slideCount,
                 theme,
+                visualTheme,
                 template);
         String cleaned = stripJsonFences(rawJson);
         try {
@@ -215,7 +243,7 @@ public class AiGenerationService {
 
         // resolveSource should prefer request.getSourceContent() (set by the controller
         // when a file was uploaded and extracted) and fall back to the note's content.
-        String source = resolveSource(request.getSourceContent(), note);
+        String source = resolveSource(request.getSourceContent(), note,request.getSourceFile());
 
         if (source == null || source.isBlank()) {
             throw new RuntimeException("No source content provided. Select a note or upload a file.");
@@ -305,7 +333,17 @@ public class AiGenerationService {
         return parts;
     }
 
-    private String resolveSource(String sourceContent, Note note) {
+    private String resolveSource(String sourceContent, Note note,  MultipartFile sourceFile) {
+        if (sourceFile != null && !sourceFile.isEmpty()) {
+
+            String filename = sourceFile.getOriginalFilename();
+
+            if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
+                return extractPdfText(sourceFile);
+            }
+
+           return "";
+        }
         if (sourceContent != null && !sourceContent.isBlank()) {
             return sourceContent;
         }

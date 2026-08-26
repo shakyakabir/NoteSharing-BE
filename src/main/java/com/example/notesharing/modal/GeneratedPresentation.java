@@ -48,7 +48,8 @@ public class GeneratedPresentation {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
-
+    @Column(name = "visual_theme")
+    private String visualTheme;
     @OneToMany(mappedBy = "presentation", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("slideOrder ASC")
     @Builder.Default

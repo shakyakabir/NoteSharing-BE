@@ -35,7 +35,8 @@ public class NoteService {
 
     @Autowired
     private CollaborationGroupRepository groupRepository;
-
+@Autowired
+private UserScoreService userScoreService;
 
 
     @Autowired
@@ -45,7 +46,7 @@ public class NoteService {
     public Note createNote(CreateNoteRequest req, String email) {
 
         Note note = new Note();
-
+        userScoreService.recordActivity(email);
         note.setTitle(req.getTitle());
         note.setContent(""); // IMPORTANT: empty at start
         note.setUserEmail(email);

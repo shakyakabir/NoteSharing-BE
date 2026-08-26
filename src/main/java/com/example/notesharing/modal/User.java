@@ -8,6 +8,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -46,6 +47,9 @@ public class User {
     @Builder.Default
     private SubscriptionTier subscriptionTier = SubscriptionTier.FREE;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer quizCount = 0;
     @Column(name = "subscription_start_at")
     private Instant subscriptionStartAt;
 
@@ -82,6 +86,6 @@ public class User {
 
 
     @Column(name = "last_seen_at")
-    private Instant lastSeenAt;
+    private LocalDate lastSeenAt;
 
 }

@@ -6,6 +6,7 @@ import com.example.notesharing.modal.GeneratedPresentation;
 import com.example.notesharing.modal.GeneratedReport;
 import com.example.notesharing.service.AiGenerationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,13 +44,14 @@ public class AiGenerationController {
         return aiGenerationService.exportPresentation(id);
     }
 
-    @PostMapping("/reports")
-    public GeneratedReport createReport(@RequestBody ReportRequest request) {
+    @PostMapping(value = "/reports",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public GeneratedReport createReport(@ModelAttribute ReportRequest request) {
         return aiGenerationService.createReport(request);
     }
 
-    @PostMapping("/reports/summarize")
-    public GeneratedReport summarize(@RequestBody ReportRequest request) {
+    @PostMapping(value = "/reports/summarize", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public GeneratedReport summarize(@ModelAttribute ReportRequest request) {
         return aiGenerationService.createReport(request);
     }
 

@@ -2,6 +2,7 @@ package com.example.notesharing.DTO.Request;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -17,4 +18,6 @@ public class PresentationRequest {
     private String theme;
     private String templateName;
     private Boolean includeImages;
+    private String visualTheme;
+    private MultipartFile sourceFile;
 }

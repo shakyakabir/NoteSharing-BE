@@ -2,6 +2,7 @@ package com.example.notesharing.DTO.Request;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -21,6 +22,7 @@ public class ReportRequest {
 
     // --- field coming from ReferenceReportSection ---
     private String referenceContent;
+    private MultipartFile sourceFile;
 //    private String title;
 //    private String userEmail;
 //    private UUID noteId;

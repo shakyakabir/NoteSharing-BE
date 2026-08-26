@@ -11,6 +11,7 @@ import com.example.notesharing.payload.ApiResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -28,7 +29,8 @@ private   UserRepository userRepo;
 @Autowired
 private EmailService emailService;
 
-
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
 
 
@@ -59,7 +61,7 @@ private EmailService emailService;
         User user=User.builder()
                 .userName(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
-                .password(registerRequest.getPassword())
+                .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .emailVerified(false)
                 .build();
 
@@ -95,7 +97,7 @@ private EmailService emailService;
                     .build();
         }
 
-        if (!user.getPassword().equals(loginRequest.getPassword())) {
+        if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
             return ApiResponse.builder()
                     .status("400")
                     .message("Invalid credentials")

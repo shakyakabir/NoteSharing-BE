@@ -8,8 +8,10 @@ import com.example.notesharing.Enum.AiFeature;
 import com.example.notesharing.Enum.Difficulty;
 import com.example.notesharing.Enum.QuizMode;
 import com.example.notesharing.Repository.QuizRepository;
+import com.example.notesharing.Repository.UserRepository;
 import com.example.notesharing.modal.Quiz;
 
+import com.example.notesharing.modal.User;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,7 +34,8 @@ public class QuizService {
 
     @Autowired
     private QuizRepository quizRepository;
-
+    @Autowired
+    private UserRepository userRepository;
     @Autowired
     private AiService aiService;
 
@@ -115,6 +118,7 @@ public class QuizService {
      */
     public QuizResultDTO playQuiz(UUID quizId, String playerEmail, List<QuizAnswerRequest> answers) {
         Quiz quiz = getQuiz(quizId);
+        userScoreService.recordActivity(playerEmail);
         List<String> answerKey = readAnswerKey(quiz.getAnswerKeyJson());
 
         int score = 0;
@@ -143,6 +147,22 @@ public class QuizService {
             pointsEarned = Math.round(quiz.getPointsPerCompletion() * ratio);
             userScoreService.addPoints(playerEmail, pointsEarned);
         }
+        if (playerEmail != null && !playerEmail.isBlank()) {
+
+            User user = userRepository.findByEmail(playerEmail)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            user.setQuizCount(
+                    user.getQuizCount() == null
+                            ? 1
+                            : user.getQuizCount() + 1
+            );
+            user.setPointBalance(
+                    user.getPointBalance() + (int) pointsEarned
+            );
+            userRepository.save(user);
+        }
+
         // COLLABORATIVE mode: intentionally never calls userScoreService, regardless of score.
 
         return QuizResultDTO.builder()
@@ -152,6 +172,7 @@ public class QuizService {
                 .mode(quiz.getMode().name())
                 .build();
     }
+
 
     // --- SOURCE RESOLUTION ---
 

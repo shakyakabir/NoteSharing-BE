@@ -199,6 +199,7 @@ public class AiService {
     public String generatePresentationJson(
             String sourceContent,
             int slideCount,
+            String visualTheme,
             String theme,
             String template
     ) {
@@ -215,6 +216,7 @@ public class AiService {
 
     Number of slides: %d
     Theme: %s
+    Visual Theme: %s
     Template: %s
 
     IMPORTANT DESIGN RULES:
@@ -404,6 +406,7 @@ public class AiService {
     """.formatted(
                 slideCount,
                 theme,
+                visualTheme,
                 template,
                 slideCount,
                 sourceContent
