@@ -214,7 +214,7 @@ public class AiService {
 
     Presentation requirements:
 
-    Number of slides: %d
+    slideCount: %d
     Theme: %s
     Visual Theme: %s
     Template: %s

@@ -35,8 +35,8 @@ public class NoteService {
 
     @Autowired
     private CollaborationGroupRepository groupRepository;
-@Autowired
-private UserScoreService userScoreService;
+    @Autowired
+    private UserScoreService userScoreService;
 
 
     @Autowired
@@ -67,7 +67,7 @@ private UserScoreService userScoreService;
     }
 
     // UPDATE CONTENT (AUTO SAVE)
-    public Note updateContent(UUID id, String content, String title,String email) {
+    public Note updateContent(UUID id, String content, String title, String email) {
 
         Note note = noteRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Not found"));
@@ -105,8 +105,6 @@ private UserScoreService userScoreService;
                 .orElseThrow(() -> new RuntimeException("Not found"));
 
 
-
-
         return note;
     }
 
@@ -118,10 +116,12 @@ private UserScoreService userScoreService;
 //    }
 
 
-    public List<Note> getAllNotes(String email) {
-        return noteRepository.findByUserEmail(email);
-    }
-
+//    public List<Note> getAllNotes(String email) {
+//        return noteRepository.findByUserEmail(email);
+//    }
+public List<Note> getAllNotes(String email) {
+    return noteRepository.findByUserEmailAndGroupIsNull(email);
+}
     public List<Note> getAllPublicNotes() {
         return noteRepository.findByVisibility(Visibility.PUBLIC);
     }
@@ -154,30 +154,62 @@ private UserScoreService userScoreService;
         return noteRepository.findFirstByGroupIdOrderByUpdatedAtDesc(groupId)
                 .orElseThrow(() -> new RuntimeException("No notes found for this group"));
     }
+
     // In NoteService.java
     public Note updateGroupNote(
             UUID groupId,
             CreateNoteRequest req,
             String email
     ) {
-        // validate group exists
-        if (!groupRepository.existsById(groupId)) {
-            throw new RuntimeException("Group not found");
-        }
+        CollaborationGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
 
-        // validate user is a member
-        memberRepository.findByGroupIdAndUserEmail(groupId, email)
-                .orElseThrow(() -> new RuntimeException("You are not a member of this group"));
-
-        Note note = noteRepository.findFirstByGroupIdOrderByUpdatedAtDesc(groupId)
-                .orElseThrow(() -> new RuntimeException("No notes found for this group"));
+        GroupMember member = memberRepository
+                .findByGroupIdAndUserEmail(groupId, email)
+                .orElseThrow(() ->
+                        new RuntimeException("You are not a member of this group"));
+        member.setGroup(group);
+        member.setUserEmail(email);
+        memberRepository.save(member);
+        Note note = new Note();
 
         note.setTitle(req.getTitle());
         note.setContent(req.getContent());
+        note.setUserEmail(email);
+        note.setUser(
+                userRepository.findByEmail(email)
+                        .orElseThrow(() -> new RuntimeException("User not found"))
+        );
+
+        note.setGroup(group);
+
+        note.setCreatedAt(LocalDateTime.now());
         note.setUpdatedAt(LocalDateTime.now());
+
+        // Group controls access, not PUBLIC/PRIVATE
+        note.setVisibility(Visibility.FRIENDS);
 
         return noteRepository.save(note);
     }
+
+    // validate group exists
+//        if (!groupRepository.existsById(groupId)) {
+//            throw new RuntimeException("Group not found");
+//        }
+//
+//        // validate user is a member
+//        memberRepository.findByGroupIdAndUserEmail(groupId, email)
+//                .orElseThrow(() -> new RuntimeException("You are not a member of this group"));
+//
+//        Note note = noteRepository.findFirstByGroupIdOrderByUpdatedAtDesc(groupId)
+//                .orElseThrow(() -> new RuntimeException("No notes found for this group"));
+//
+//        note.setTitle(req.getTitle());
+//        note.setContent(req.getContent());
+//        note.setUpdatedAt(LocalDateTime.now());
+//
+//        return noteRepository.save(note);
+//}
 //    public Note createGroupNote(
 //            CreateNoteRequest req,
 //            UUID groupId,

@@ -7,20 +7,20 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * Admin analytics payload. Real metrics: {@code churnRate} (expired+cancelled / total subscriptions)
- * and {@code aiCreditsConsumed} (from the CONSUME ledger), plus per-feature {@code featureUsage}.
- * Honest placeholders (no payment system / no timing instrumentation): {@code mrr} = 0,
- * {@code avgProcessingTime} = 0, {@code revenueBreakdown} = empty.
+ * Admin analytics payload. Revenue is real money: {@code subscriptionRevenue} is the completed eSewa
+ * payment total, {@code adsRevenue} is the accumulated CPM+CPC ad earnings, and {@code totalRevenue}
+ * is their sum. {@code aiCreditsConsumed} comes from the CONSUME ledger; {@code featureUsage} is the
+ * per-feature share; {@code revenueBreakdown} is the last-6-months subscription+ads series.
  */
 @Getter
 @Setter
 @Builder
 public class AdminAnalyticsDTO {
 
-    private double mrr;
-    private double churnRate;
+    private double subscriptionRevenue;
+    private double adsRevenue;
+    private double totalRevenue;
     private long aiCreditsConsumed;
-    private double avgProcessingTime;
     private List<RevenuePointDTO> revenueBreakdown;
     private List<FeatureUsageDTO> featureUsage;
 }

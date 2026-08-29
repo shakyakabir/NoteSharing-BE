@@ -20,11 +20,6 @@ public class QuizController {
     @Autowired
     private QuizService quizService;
 
-    /**
-     * Creates a quiz from either pasted note text OR an uploaded file (PDF/TXT) - send exactly
-     * one of `noteText` / `file`. `mode` = solo | collaborative, `difficulty` = beginner |
-     * intermediate | advanced | expert, matching the frontend's QuizSetupForm.
-     */
     @PostMapping(value = "/quiz/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Quiz createQuiz(
             @RequestPart("data") QuizCreateRequest data,
@@ -45,11 +40,7 @@ public class QuizController {
         return quizService.getQuiz(id);
     }
 
-    /**
-     * `playerEmail` is whoever is actually taking the quiz right now - in solo mode that's the
-     * quiz owner, in collaborative mode it may be any friend in the session. Points (if any)
-     * are credited to playerEmail, not quiz.userEmail.
-     */
+
     @PostMapping("/play")
     public QuizResultDTO playQuiz(
             @RequestParam UUID quizId,

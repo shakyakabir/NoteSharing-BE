@@ -8,6 +8,7 @@ import com.example.notesharing.service.AiGenerationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -18,12 +19,15 @@ public class AiGenerationController {
 
     @Autowired
     private AiGenerationService aiGenerationService;
-
-    @PostMapping("/presentations")
-    public GeneratedPresentation createPresentation(@RequestBody PresentationRequest request) {
-        return aiGenerationService.createPresentation(request);
-    }
-
+//
+//    @PostMapping("/presentations")
+//    public GeneratedPresentation createPresentation(@RequestBody PresentationRequest request) {
+//        return aiGenerationService.createPresentation(request);
+//    }
+@PostMapping(value = "/presentations", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public GeneratedPresentation createPresentation(@ModelAttribute PresentationRequest request) {
+    return aiGenerationService.createPresentation(request);
+}
     @PostMapping("/presentations/from-note")
     public GeneratedPresentation createPresentationFromNote(@RequestBody PresentationRequest request) {
         return aiGenerationService.createPresentation(request);

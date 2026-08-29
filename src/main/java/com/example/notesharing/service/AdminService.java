@@ -5,17 +5,23 @@ import com.example.notesharing.DTO.AdminDashboardDTO;
 import com.example.notesharing.DTO.AdminMeDTO;
 import com.example.notesharing.DTO.FeatureUsageDTO;
 import com.example.notesharing.DTO.PageResponse;
+import com.example.notesharing.DTO.PaymentHistoryDTO;
+import com.example.notesharing.DTO.RevenuePointDTO;
 import com.example.notesharing.DTO.UserAdminDTO;
 import com.example.notesharing.Enum.AiFeature;
 import com.example.notesharing.Enum.CreditTransactionType;
+import com.example.notesharing.Enum.PaymentMethod;
+import com.example.notesharing.Enum.PaymentStatus;
 import com.example.notesharing.Enum.SubscriptionPlan;
 import com.example.notesharing.Enum.SubscriptionStatus;
 import com.example.notesharing.Repository.AiFeatureConfigRepository;
 import com.example.notesharing.Repository.AiSubscriptionRepository;
 import com.example.notesharing.Repository.CreditTransactionRepository;
+import com.example.notesharing.Repository.SubscriptionPaymentRepository;
 import com.example.notesharing.Repository.UserRepository;
 import com.example.notesharing.modal.AiFeatureConfig;
 import com.example.notesharing.modal.AiSubscription;
+import com.example.notesharing.modal.SubscriptionPayment;
 import com.example.notesharing.modal.User;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,18 +33,22 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Read models + write operations behind the admin screens. Every metric has a real DB source; money
- * metrics (revenue, MRR) and un-instrumented ops metrics (avg processing time) are reported as
- * 0/empty rather than fabricated, since premium is unlocked with points, not real payments. All
- * user-scoped writes (status/credits/plan) delegate to {@link AiCreditService} so the "never
- * negative", history-preserving, tier-mirroring guarantees stay in one place.
+ * Read models + write operations behind the admin screens. Every metric has a real DB source:
+ * subscription revenue from completed eSewa payments, ad revenue from the CPM+CPC counters, AI
+ * credits from the CONSUME ledger. All user-scoped writes (status/credits/plan) delegate to
+ * {@link AiCreditService} so the "never negative", history-preserving, tier-mirroring guarantees
+ * stay in one place.
  */
 @Service
 public class AdminService {
@@ -58,6 +68,12 @@ public class AdminService {
     @Autowired
     private AiCreditService aiCreditService;
 
+    @Autowired
+    private SubscriptionPaymentRepository subscriptionPaymentRepository;
+
+    @Autowired
+    private AdvertisementService advertisementService;
+
     // ---- Dashboard / analytics -----------------------------------------------------------
 
     public AdminDashboardDTO dashboard() {
@@ -71,18 +87,21 @@ public class AdminService {
 
     public AdminAnalyticsDTO analytics(String range) {
         long consumed = Math.abs(creditTransactionRepository.sumAmountByType(CreditTransactionType.CONSUME));
-        long active = aiSubscriptionRepository.countByStatus(SubscriptionStatus.ACTIVE);
-        long expired = aiSubscriptionRepository.countByStatus(SubscriptionStatus.EXPIRED);
-        long cancelled = aiSubscriptionRepository.countByStatus(SubscriptionStatus.CANCELLED);
-        long total = active + expired + cancelled;
-        double churn = total > 0 ? ((double) (expired + cancelled) / total) * 100.0 : 0.0;
+
+        // Real revenue: completed eSewa payments (Khalti has no completion callback yet, so it never
+        // contributes) plus the accumulated CPM+CPC ad earnings.
+        double subscriptionRevenue = subscriptionPaymentRepository
+                .sumAmountByStatusAndMethod(PaymentStatus.COMPLETED, PaymentMethod.ESEWA)
+                .doubleValue();
+        double adsRevenue = advertisementService.totalAdRevenue();
+        double totalRevenue = subscriptionRevenue + adsRevenue;
 
         return AdminAnalyticsDTO.builder()
-                .mrr(0)
-                .churnRate(round1(churn))
+                .subscriptionRevenue(round1(subscriptionRevenue))
+                .adsRevenue(round1(adsRevenue))
+                .totalRevenue(round1(totalRevenue))
                 .aiCreditsConsumed(consumed)
-                .avgProcessingTime(0)
-                .revenueBreakdown(List.of())
+                .revenueBreakdown(revenueBreakdown(adsRevenue))
                 .featureUsage(featureUsage())
                 .build();
     }
@@ -110,6 +129,77 @@ public class AdminService {
                     .build());
         }
         return usage;
+    }
+
+    /**
+     * Last-6-months revenue series. {@code subscription} is grouped from completed eSewa payments by
+     * their {@code createdAt} month. Ad counters are not timestamped, so the whole accumulated
+     * {@code adsRevenue} is placed in the current (most recent) month bucket rather than fabricating a
+     * per-month split - an intentional approximation.
+     */
+    private List<RevenuePointDTO> revenueBreakdown(double adsRevenue) {
+        YearMonth current = YearMonth.now();
+        List<YearMonth> months = new ArrayList<>();
+        for (int i = 5; i >= 0; i--) {
+            months.add(current.minusMonths(i));
+        }
+
+        Map<YearMonth, Double> subsByMonth = new HashMap<>();
+        List<SubscriptionPayment> completed = subscriptionPaymentRepository
+                .findByStatusAndPaymentMethodOrderByCreatedAtDesc(PaymentStatus.COMPLETED, PaymentMethod.ESEWA);
+        for (SubscriptionPayment payment : completed) {
+            if (payment.getCreatedAt() == null || payment.getAmount() == null) {
+                continue;
+            }
+            subsByMonth.merge(YearMonth.from(payment.getCreatedAt()), payment.getAmount().doubleValue(), Double::sum);
+        }
+
+        DateTimeFormatter label = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH);
+        List<RevenuePointDTO> series = new ArrayList<>();
+        for (YearMonth month : months) {
+            double subscription = subsByMonth.getOrDefault(month, 0.0);
+            double ads = month.equals(current) ? adsRevenue : 0.0;
+            series.add(RevenuePointDTO.builder()
+                    .month(month.atDay(1).format(label))
+                    .subscription(round1(subscription))
+                    .ads(round1(ads))
+                    .build());
+        }
+        return series;
+    }
+
+    /** Paged eSewa payment history for the admin screen (all statuses, newest first). */
+    @Transactional
+    public PageResponse<PaymentHistoryDTO> paymentHistory(int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), size <= 0 ? 10 : size);
+        Page<SubscriptionPayment> result = subscriptionPaymentRepository
+                .findByPaymentMethodOrderByCreatedAtDesc(PaymentMethod.ESEWA, pageable);
+
+        List<PaymentHistoryDTO> content = result.getContent().stream()
+                .map(this::toPaymentDTO)
+                .toList();
+
+        return PageResponse.<PaymentHistoryDTO>builder()
+                .content(content)
+                .totalElements(result.getTotalElements())
+                .totalPages(result.getTotalPages())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .build();
+    }
+
+    private PaymentHistoryDTO toPaymentDTO(SubscriptionPayment payment) {
+        return PaymentHistoryDTO.builder()
+                .id(payment.getId() != null ? payment.getId().toString() : null)
+                .userEmail(payment.getUserEmail())
+                .planName(payment.getPlan() != null ? payment.getPlan().getName() : null)
+                .amount(payment.getAmount())
+                .paymentMethod(payment.getPaymentMethod() != null ? payment.getPaymentMethod().name() : null)
+                .status(payment.getStatus() != null ? payment.getStatus().name() : null)
+                .transactionUuid(payment.getTransactionUuid())
+                .createdAt(payment.getCreatedAt() != null ? payment.getCreatedAt().toString() : null)
+                .completedAt(payment.getCompletedAt() != null ? payment.getCompletedAt().toString() : null)
+                .build();
     }
 
     public AdminMeDTO me() {

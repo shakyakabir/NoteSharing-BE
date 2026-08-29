@@ -632,6 +632,16 @@ public class SubscriptionPaymentService {
                     PaymentStatus.COMPLETED
             );
 
+            payment.setCompletedAt(
+                    LocalDateTime.now()
+            );
+
+            payment.setProviderTransactionId(
+                    String.valueOf(
+                            response.get("transaction_code")
+                    )
+            );
+
             paymentRepository.save(payment);
 
 

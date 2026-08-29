@@ -5,8 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A point on the analytics revenue/churn series. Superset of the frontend chart keys so either chart
- * can bind to it. Always returned as an empty series (no payment system) - honest, not fabricated.
+ * A point on the analytics revenue series (one per month). {@code subscription} is the completed
+ * eSewa payment total for that month; {@code ads} is the accumulated CPM+CPC ad revenue (see
+ * {@code AdminService.revenueBreakdown} for why ads sits in the current-month bucket).
  */
 @Getter
 @Setter
@@ -14,8 +15,6 @@ import lombok.Setter;
 public class RevenuePointDTO {
 
     private String month;
-    private double mrr;
-    private double churn;
     private double subscription;
     private double ads;
 }

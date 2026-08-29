@@ -23,4 +23,14 @@ public class EmailService {
         mailSender.send(message);
     }
 
+    public void sendPasswordResetOtp(String email, String otp) {
+
+        SimpleMailMessage message = new SimpleMailMessage();
+
+        message.setTo(email);
+        message.setSubject("Password Reset Code");
+        message.setText("Your password reset code is: " + otp + " (valid for 3 minutes)");
+        mailSender.send(message);
+    }
+
 }

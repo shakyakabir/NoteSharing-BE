@@ -51,33 +51,53 @@ public class AiGenerationService {
     @Autowired
     private AiCreditService creditService;
 
-    private String extractPdfText(MultipartFile file) {
-        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+//    private String extractPdfText(MultipartFile file) {
+//        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+//
+//            PDFTextStripper stripper = new PDFTextStripper();
+//
+//            String text = stripper.getText(document);
+//
+//            if (text == null || text.isBlank()) {
+//                throw new RuntimeException("Could not extract text from PDF");
+//            }
+//
+//            return text;
+//
+//        } catch (IOException e) {
+//            throw new RuntimeException("Failed to read PDF file", e);
+//        }
+//    }
+private String extractPdfText(MultipartFile file) {
+    try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+        PDFTextStripper stripper = new PDFTextStripper();
+        String text = stripper.getText(document);
 
-            PDFTextStripper stripper = new PDFTextStripper();
-
-            String text = stripper.getText(document);
-
-            if (text == null || text.isBlank()) {
-                throw new RuntimeException("Could not extract text from PDF");
-            }
-
-            return text;
-
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read PDF file", e);
+        if (text == null || text.isBlank()) {
+            throw new RuntimeException("Could not extract text from PDF. It may be a scanned/image-only PDF.");
         }
+        if (text.trim().length() < 50) { // arbitrary sanity threshold
+            throw new RuntimeException("PDF text extraction produced too little content to generate a presentation.");
+        }
+        return text;
+    } catch (IOException e) {
+        throw new RuntimeException("Failed to read PDF file", e);
     }
-
+}
     public GeneratedPresentation createPresentation(PresentationRequest request) {
         if (request == null) {
             throw new RuntimeException("Presentation request is required");
         }
         validateEmail(request.getUserEmail());
-
+        System.out.println(request);
+        System.out.println("ruestes..............");
         User user = findUser(request.getUserEmail());
         Note note = findNote(request.getNoteId());
         String source = resolveSource(request.getSourceContent(), note,request.getSourceFile());
+
+        if (source == null || source.isBlank()) {
+            throw new RuntimeException("No source content provided. Upload a PDF or enter a prompt.");
+        }
 
         int slideCount = resolveSlideCount(request.getSlideCount());
         String theme = defaultValue(request.getTheme(), "Clean");
@@ -101,7 +121,8 @@ public class AiGenerationService {
         presentation.setCreatedAt(LocalDateTime.now());
         presentation.setUpdatedAt(LocalDateTime.now());
         boolean includeImages = request.getIncludeImages() == null || request.getIncludeImages();
-
+            System.out.println(presentation);
+            System.out.println("present..............");
         int order = 1;
 //        for (SlideContent slideContent : aiContent.slides()) {
 //            String imageUrl = imageGenerationService.generateImage(slideContent.image());
@@ -145,7 +166,8 @@ public class AiGenerationService {
                     .imageUrl(imageUrl)
                     .imagePrompt(imagePrompt)
                     .build();
-
+            System.out.println(slide);
+            System.out.println("slide..............");
             slide.setPresentation(presentation);
             presentation.getSlides().add(slide);
         }
@@ -180,32 +202,85 @@ public class AiGenerationService {
             return null;
         }
     }
-    private PresentationContent generateStructuredContent(String source,
-                                                          int slideCount,
-                                                          String theme,
-                                                          String visualTheme,
-                                                          String template) {
-        String rawJson = aiService.generatePresentationJson(  source,
-                slideCount,
-                theme,
-                visualTheme,
-                template);
-        String cleaned = stripJsonFences(rawJson);
-        try {
-            return objectMapper.readValue(cleaned, PresentationContent.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse AI presentation response: " + e.getMessage(), e);
-        }
-    }
+//    private PresentationContent generateStructuredContent(String source,
+//                                                          int slideCount,
+//                                                          String theme,
+//                                                          String visualTheme,
+//                                                          String template) {
+//        String rawJson = aiService.generatePresentationJson(  source,
+//                slideCount,
+//                visualTheme,
+//                theme,
+//
+//                template);
+//        String cleaned = stripJsonFences(rawJson);
+//        try {
+//            return objectMapper.readValue(cleaned, PresentationContent.class);
+//        } catch (Exception e) {
+//            throw new RuntimeException("Failed to parse AI presentation response: " + e.getMessage(), e);
+//        }
+//    }
+private PresentationContent generateStructuredContent(
+        String source,
+        int slideCount,
+        String theme,
+        String visualTheme,
+        String template
+) {
+    String rawJson = aiService.generatePresentationJson(
+            source,
+            slideCount,
+            visualTheme,
+            theme,
+            template
+    );
 
+    System.out.println("========== RAW AI RESPONSE ==========");
+    System.out.println(rawJson);
+    System.out.println("========== END RAW AI RESPONSE ==========");
+
+    String cleaned = stripJsonFences(rawJson);
+
+    System.out.println("========== CLEANED JSON ==========");
+    System.out.println(cleaned);
+    System.out.println("========== END CLEANED JSON ==========");
+
+    try {
+        return objectMapper.readValue(cleaned, PresentationContent.class);
+
+    } catch (Exception e) {
+        System.out.println("========== INVALID AI JSON ==========");
+        System.out.println(cleaned);
+        System.out.println("====================================");
+
+        throw new RuntimeException(
+                "Failed to parse AI presentation response: " + e.getMessage(),
+                e
+        );
+    }
+}
     private String stripJsonFences(String raw) {
         if (raw == null) return "{}";
         String trimmed = raw.trim();
         if (trimmed.startsWith("```")) {
             trimmed = trimmed.replaceAll("^```(json)?", "").replaceAll("```$", "").trim();
         }
+        // If the model added prose before/after the JSON, extract the JSON object substring
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return trimmed.substring(start, end + 1);
+        }
         return trimmed;
     }
+//    private String stripJsonFences(String raw) {
+//        if (raw == null) return "{}";
+//        String trimmed = raw.trim();
+//        if (trimmed.startsWith("```")) {
+//            trimmed = trimmed.replaceAll("^```(json)?", "").replaceAll("```$", "").trim();
+//        }
+//        return trimmed;
+//    }
 
     public List<GeneratedPresentation> getPresentations(String email) {
         validateEmail(email);
@@ -333,25 +408,49 @@ public class AiGenerationService {
         return parts;
     }
 
-    private String resolveSource(String sourceContent, Note note,  MultipartFile sourceFile) {
-        if (sourceFile != null && !sourceFile.isEmpty()) {
-
-            String filename = sourceFile.getOriginalFilename();
-
-            if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
-                return extractPdfText(sourceFile);
-            }
-
-           return "";
+//    private String resolveSource(String sourceContent, Note note,  MultipartFile sourceFile) {
+//        if (sourceFile != null && !sourceFile.isEmpty()) {
+//
+//            String filename = sourceFile.getOriginalFilename();
+//
+//            if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
+//                return extractPdfText(sourceFile);
+//            }
+//
+//           return "";
+//        }
+//        if (sourceContent != null && !sourceContent.isBlank()) {
+//            return sourceContent;
+//        }
+//        if (note != null) {
+//            return note.getContent();
+//        }
+//        return "";
+//    }
+private String resolveSource(String sourceContent, Note note, MultipartFile sourceFile) {
+    String pdfText = null;
+    if (sourceFile != null && !sourceFile.isEmpty()) {
+        String filename = sourceFile.getOriginalFilename();
+        if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
+            pdfText = extractPdfText(sourceFile);
         }
-        if (sourceContent != null && !sourceContent.isBlank()) {
-            return sourceContent;
-        }
-        if (note != null) {
-            return note.getContent();
-        }
-        return "";
     }
+
+    if (pdfText != null && sourceContent != null && !sourceContent.isBlank()) {
+        // both a file and typed instructions were given — combine them
+        return "INSTRUCTIONS:\n" + sourceContent + "\n\nSOURCE MATERIAL:\n" + pdfText;
+    }
+    if (pdfText != null) {
+        return pdfText;
+    }
+    if (sourceContent != null && !sourceContent.isBlank()) {
+        return sourceContent;
+    }
+    if (note != null) {
+        return note.getContent();
+    }
+    return "";
+}
 
     private User findUser(String email) {
         return userRepository.findByEmail(email)

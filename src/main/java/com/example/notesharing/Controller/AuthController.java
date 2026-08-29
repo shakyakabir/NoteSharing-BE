@@ -43,6 +43,8 @@ package com.example.notesharing.Controller;
 
 import com.example.notesharing.DTO.LoginDTO;
 import com.example.notesharing.DTO.RegisterRequest;
+import com.example.notesharing.DTO.Request.ForgotPasswordRequest;
+import com.example.notesharing.DTO.Request.ResetPasswordRequest;
 import com.example.notesharing.payload.ApiResponse;
 import com.example.notesharing.service.AuthService;
 import com.example.notesharing.service.JwtService;
@@ -69,6 +71,16 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<?> login(@RequestBody LoginDTO login, HttpServletResponse response) {
         return authService.LoginService(login,response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ApiResponse<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        return authService.requestPasswordReset(request);
+    }
+
+    @PostMapping("/reset-password")
+    public ApiResponse<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        return authService.resetPassword(request);
     }
 @Autowired
     JwtService jwtService;

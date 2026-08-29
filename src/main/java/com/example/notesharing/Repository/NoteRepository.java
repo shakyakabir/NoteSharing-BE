@@ -19,7 +19,7 @@ public interface NoteRepository extends JpaRepository<Note, UUID> {
 
     List<Note> findByGroupId(UUID groupId);
     List<Note>findByVisibility(Visibility noteVisibility);
-
+    List<Note> findByUserEmailOrVisibility(String userEmail, String visibility);
     Optional<Note> findFirstByGroupIdOrderByUpdatedAtDesc(UUID groupId);
-
+    List<Note> findByUserEmailAndGroupIsNull(String userEmail);
 }
